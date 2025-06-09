@@ -10,7 +10,7 @@
 ## Description
 **Author(s)**: [LaswitchTech](support@laswitchtech.com)
 
-LaswitchTech - Core Framework extension.
+LaswitchTech - Core Framework extension. This plugin provides a simple way to build Graphical User Interface (GUI) components for your plugins. It allows you to create forms, buttons, and other UI elements that can be used in your plugins.
 
 ## License
 This software is distributed under the [GPLv3](LICENSE) license.
