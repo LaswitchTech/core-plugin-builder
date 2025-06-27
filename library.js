@@ -9030,7 +9030,7 @@ class Builder {
 
             #tools = {};
             #actions = {};
-            #items = {};
+            _items = {};
 
             _init(){
                 this._properties = {
@@ -9094,7 +9094,7 @@ class Builder {
                 this.#genTools();
 
                 // Generate Actions
-                for(var [id, item] of Object.entries(this.#items)){
+                for(var [id, item] of Object.entries(this._items)){
                     this.#genActions(item);
                 }
 
@@ -9202,7 +9202,7 @@ class Builder {
                 }
 
                 // Save Actions in Item
-                this.#items[item.id].actions = actions;
+                this._items[item.id].actions = actions;
 
                 // Return Actions
                 return actions;
@@ -9362,7 +9362,7 @@ class Builder {
             }
 
             get(){
-                return this.#items;
+                return this._items;
             }
 
             add(param1 = null, param2 = null){
@@ -9552,7 +9552,7 @@ class Builder {
                 this._builder.Search.set(item);
 
                 // Save Item
-                this.#items[item.id] = item;
+                this._items[item.id] = item;
 
                 // Return Object
                 return this;
