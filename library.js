@@ -52,6 +52,7 @@ class Builder {
         this.Toast = this.Utility('toast');
         this.Message = this.Utility('message');
         this.Notification = this.Utility('notification');
+        this.Storage = this.Utility('storage');
     }
 
     count(){
@@ -3144,6 +3145,156 @@ class Builder {
                 return (str + '').replace(/^([a-z])|\s+([a-z])/g, function ($1) {
                     return $1.toUpperCase();
                 });
+            }
+        },
+        storage: class extends this.UtilityClass {
+
+            // Properties
+            _currentKey = null;
+            _callback = null;
+
+            // Set the callback function
+            setCallback(callback){
+                if(typeof callback === 'function'){
+                    this._callback = callback;
+                }
+            }
+
+            // Set a custom key for storage
+            setKey(key){
+                if(typeof key !== 'undefined' && key !== null && key !== ''){
+                    this._currentKey = key;
+                }
+            }
+
+            // Generate a storage key
+            getKey(){
+                if(typeof this._currentKey !== 'undefined' && this._currentKey !== null && this._currentKey !== ''){
+                    return this._currentKey;
+                }
+                const pathname = window.location.pathname;
+                const urlParams = new URLSearchParams(window.location.search);
+                const id = urlParams.get('id');
+                var key = pathname.replace(/^\/+|\/+$/g, '').replace(/\//g, ':').replace(/^:+|:+$/g, '')
+                if(id !== null && id !== undefined && id !== ''){
+                    key += ':' + id;
+                }
+                return key || 'index'
+            }
+
+            // Set a value in localStorage
+            set(value, subkey = null, key = null){ // Subkey will be stored as key:key:key of the object
+
+                // If no key is provided, use the default key
+                if(key === null || key === undefined || key === ''){
+                    key = this.getKey();
+                }
+
+                // Get the existing value from localStorage
+                let object = this.get(null, key);
+
+                // Check if a subkey is provided
+                if(subkey === null || subkey === undefined || subkey === ''){
+
+                    // Set the value in localStorage
+                    localStorage.setItem(key, JSON.stringify(value));
+                } else {
+
+                    // Define the subkey path
+                    let path    = subkey.split(':');
+                    let current = object;
+
+                    // Make sure we are starting from a real object
+                    if (current === null || typeof current !== 'object') {
+                        current = {};
+                    }
+
+                    /* Walk every element except the last one.
+                     * If the step doesn't exist or isn't an object, create an empty object
+                     * so we can keep drilling down.
+                     */
+                    for (let i = 0; i < path.length - 1; i++) {
+                        const segment = path[i];
+
+                        if (typeof current[segment] !== 'object' || current[segment] === null) {
+                            current[segment] = {};
+                        }
+                        current = current[segment];
+                    }
+
+                    // Set the final segment
+                    const last = path[path.length - 1];
+                    current[last] = value;
+
+                    // Persist back to localStorage
+                    localStorage.setItem(key, JSON.stringify(object));
+                }
+
+                // If a callback is set, call it with the value
+                if(this._callback && typeof this._callback === 'function'){
+                    this._callback(value, subkey, key);
+                }
+            }
+
+            // Get a value from localStorage
+            get(subkey = null, key = null){
+
+                // If no key is provided, use the default key
+                if(key === null || key === undefined || key === ''){
+                    key = this.getKey();
+                }
+
+                // Get the value from localStorage
+                let object = localStorage.getItem(key);
+
+                // Check if the value is a JSON string
+                if(object !== null && object !== undefined && object !== ''){
+                    try {
+                        object = JSON.parse(object);
+                    } catch (e) {
+                        // If parsing fails, return the value as is
+                    }
+                }
+
+                // If no subkey is provided, return the whole object
+                if(subkey === null || subkey === undefined || subkey === ''){
+                    return object;
+                }
+
+                // Define the subkey path
+                let path    = subkey.split(':');
+                let current = object;
+
+                // Make sure we are starting from a real object
+                if (current === null || typeof current !== 'object') {
+                    current = {};
+                }
+
+                /* Walk every element except the last one.
+                    * If the step doesn't exist or isn't an object, create an empty object
+                    * so we can keep drilling down.
+                    */
+                for (let i = 0; i < path.length - 1; i++) {
+                    const segment = path[i];
+
+                    if (typeof current[segment] !== 'object' || current[segment] === null) {
+                        current[segment] = {};
+                    }
+                    current = current[segment];
+                }
+
+                // Return the final segment
+                const last = path[path.length - 1];
+                return current[last] !== undefined ? current[last] : null;
+            }
+
+            // Remove a value from localStorage
+            remove(key = null){
+                if(key === null || key === undefined || key === ''){
+                    key = this.getKey();
+                }
+                // Remove the value from localStorage
+                localStorage.removeItem(key);
             }
         },
     };
@@ -8738,10 +8889,10 @@ class Builder {
                 }
 
                 // Set Input Class
-                if(this._properties.class.input){
+                if(typeof field.input !== "undefined" && this._properties.class.input){
                     field.input.addClass(this._properties.class.input);
                 }
-                if(properties.class.input){
+                if(typeof field.input !== "undefined" && properties.class.input){
                     field.input.addClass(properties.class.input);
                 }
 
@@ -8879,7 +9030,7 @@ class Builder {
 
             #tools = {};
             #actions = {};
-            #items = {};
+            _items = {};
 
             _init(){
                 this._properties = {
@@ -8943,7 +9094,7 @@ class Builder {
                 this.#genTools();
 
                 // Generate Actions
-                for(var [id, item] of Object.entries(this.#items)){
+                for(var [id, item] of Object.entries(this._items)){
                     this.#genActions(item);
                 }
 
@@ -9051,7 +9202,7 @@ class Builder {
                 }
 
                 // Save Actions in Item
-                this.#items[item.id].actions = actions;
+                this._items[item.id].actions = actions;
 
                 // Return Actions
                 return actions;
@@ -9211,7 +9362,7 @@ class Builder {
             }
 
             get(){
-                return this.#items;
+                return this._items;
             }
 
             add(param1 = null, param2 = null){
@@ -9401,7 +9552,7 @@ class Builder {
                 this._builder.Search.set(item);
 
                 // Save Item
-                this.#items[item.id] = item;
+                this._items[item.id] = item;
 
                 // Return Object
                 return this;
@@ -11459,7 +11610,7 @@ class Builder {
                     },
                 }
             }
-            #datatable = null
+            _datatable = null
 
             _init(){
                 this._properties = {
@@ -11752,15 +11903,15 @@ class Builder {
                         $('.timeago').timeago();
                     }, 0);
 
-                    if(typeof self.#datatable !== 'undefined'){
+                    if(typeof self._datatable !== 'undefined'){
 
                         // Double Click Event
                         if(typeof self._properties.dblclick === 'function'){
                             self._component.table.find('tr').off().dblclick(
                                 function(event){
                                     let node = $(this)
-                                    let data = self.#datatable.row(node).data();
-                                    self._properties.dblclick(event, self, self.#datatable, node, data);
+                                    let data = self._datatable.row(node).data();
+                                    self._properties.dblclick(event, self, self._datatable, node, data);
                                 },
                             );
                         }
@@ -11778,10 +11929,10 @@ class Builder {
                             let li = node.parents('li');
                             let action = node.attr('data-action');
                             let row = node.parents('tr');
-                            let data = self.#datatable.row(row).data();
+                            let data = self._datatable.row(row).data();
                             node.off().click(function(event){
                                 if(typeof self._properties.actions[action].action === 'function'){
-                                    self._properties.actions[action].action(event, self, self.#datatable, node, row, data);
+                                    self._properties.actions[action].action(event, self, self._datatable, node, row, data);
                                 }
                             })
                             if(typeof self._properties.actions[action].visible === 'function'){
@@ -11812,31 +11963,31 @@ class Builder {
                 const self = this;
 
                 // Initialize Datatable
-                this.#datatable = this._component.table.DataTable(this.#configure());
+                this._datatable = this._component.table.DataTable(this.#configure());
 
                 // Hide buttons if no rows are selected
-                this.#datatable.on('select.dt deselect.dt', () => {
+                this._datatable.on('select.dt deselect.dt', () => {
                     // Check if any rows are selected
-                    const anySelected = this.#datatable.rows({ selected:true }).any();
+                    const anySelected = this._datatable.rows({ selected:true }).any();
                     // Count selected rows
-                    const selectedCount = this.#datatable.rows({ selected:true }).count();
+                    const selectedCount = this._datatable.rows({ selected:true }).count();
 
                     // Enable / disable first (optional – keeps keyboard users happy)
-                    this.#datatable.buttons('.requires-selection').enable(anySelected);     // API method  :contentReference[oaicite:1]{index=1}
+                    this._datatable.buttons('.requires-selection').enable(anySelected);     // API method  :contentReference[oaicite:1]{index=1}
 
                     // Then actually hide or show the buttons’ DOM elements
-                    $(this.#datatable.buttons('.requires-selection').nodes()).toggleClass('d-none', !anySelected);  // Bootstrap’s “display:none”
+                    $(this._datatable.buttons('.requires-selection').nodes()).toggleClass('d-none', !anySelected);  // Bootstrap’s “display:none”
 
                     // Enable / disable first (optional – keeps keyboard users happy)
-                    this.#datatable.buttons('.requires-selection-multiple').enable(selectedCount > 1);     // API method  :contentReference[oaicite:1]{index=1}
+                    this._datatable.buttons('.requires-selection-multiple').enable(selectedCount > 1);     // API method  :contentReference[oaicite:1]{index=1}
 
                     // Then actually hide or show the buttons’ DOM elements
-                    $(this.#datatable.buttons('.requires-selection-multiple').nodes()).toggleClass('d-none', !(selectedCount > 1));  // Bootstrap’s “display:none”
+                    $(this._datatable.buttons('.requires-selection-multiple').nodes()).toggleClass('d-none', !(selectedCount > 1));  // Bootstrap’s “display:none”
                 });
 
                 // Add Search
                 this._builder.Search.get().on('input propertychange',function(){
-                    self.#datatable.search($(this).val()).draw();
+                    self._datatable.search($(this).val()).draw();
                 });
             }
 
@@ -11844,11 +11995,11 @@ class Builder {
 
                 // Check if the caller only wants the selected rows
                 if (selected) {
-                    return this.#datatable.rows({ selected: true }).data().toArray();
+                    return this._datatable.rows({ selected: true }).data().toArray();
                 }
 
                 // Otherwise return the full dataset
-                return this.#datatable.data().toArray();
+                return this._datatable.data().toArray();
             }
 
             add(data){
@@ -11856,17 +12007,17 @@ class Builder {
                 // Set Self
                 const self = this;
 
-                if(this.#datatable){
+                if(this._datatable){
 
                     // Add Row
-                    this.#datatable.row.add(data).draw()
+                    this._datatable.row.add(data).draw()
                 } else {
 
                     // Clear the interval once the table is found
                     var interval = setInterval(function() {
-                        if(self.#datatable){
+                        if(self._datatable){
                             clearInterval(interval);
-                            self.#datatable.row.add(data).draw()
+                            self._datatable.row.add(data).draw()
                         }
                     }, 100);
                 }
@@ -11878,7 +12029,7 @@ class Builder {
                 const self = this;
 
                 // Update Row
-                setTimeout(() => this.#datatable.row(row).data(data).draw(), 0);
+                setTimeout(() => this._datatable.row(row).data(data).draw(), 0);
             }
 
             delete(row){
@@ -11887,7 +12038,7 @@ class Builder {
                 const self = this;
 
                 // Delete Row
-                setTimeout(() => this.#datatable.row(row).remove().draw(), 0);
+                setTimeout(() => this._datatable.row(row).remove().draw(), 0);
             }
         },
         tabs: class extends this.ComponentClass {
