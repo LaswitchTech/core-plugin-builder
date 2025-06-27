@@ -52,6 +52,7 @@ class Builder {
         this.Toast = this.Utility('toast');
         this.Message = this.Utility('message');
         this.Notification = this.Utility('notification');
+        this.Storage = this.Utility('storage');
     }
 
     count(){
@@ -3144,6 +3145,156 @@ class Builder {
                 return (str + '').replace(/^([a-z])|\s+([a-z])/g, function ($1) {
                     return $1.toUpperCase();
                 });
+            }
+        },
+        storage: class extends this.UtilityClass {
+
+            // Properties
+            _currentKey = null;
+            _callback = null;
+
+            // Set the callback function
+            setCallback(callback){
+                if(typeof callback === 'function'){
+                    this._callback = callback;
+                }
+            }
+
+            // Set a custom key for storage
+            setKey(key){
+                if(typeof key !== 'undefined' && key !== null && key !== ''){
+                    this._currentKey = key;
+                }
+            }
+
+            // Generate a storage key
+            getKey(){
+                if(typeof this._currentKey !== 'undefined' && this._currentKey !== null && this._currentKey !== ''){
+                    return this._currentKey;
+                }
+                const pathname = window.location.pathname;
+                const urlParams = new URLSearchParams(window.location.search);
+                const id = urlParams.get('id');
+                var key = pathname.replace(/^\/+|\/+$/g, '').replace(/\//g, ':').replace(/^:+|:+$/g, '')
+                if(id !== null && id !== undefined && id !== ''){
+                    key += ':' + id;
+                }
+                return key || 'index'
+            }
+
+            // Set a value in localStorage
+            set(value, subkey = null, key = null){ // Subkey will be stored as key:key:key of the object
+
+                // If no key is provided, use the default key
+                if(key === null || key === undefined || key === ''){
+                    key = this.getKey();
+                }
+
+                // Get the existing value from localStorage
+                let object = this.get(null, key);
+
+                // Check if a subkey is provided
+                if(subkey === null || subkey === undefined || subkey === ''){
+
+                    // Set the value in localStorage
+                    localStorage.setItem(key, JSON.stringify(value));
+                } else {
+
+                    // Define the subkey path
+                    let path    = subkey.split(':');
+                    let current = object;
+
+                    // Make sure we are starting from a real object
+                    if (current === null || typeof current !== 'object') {
+                        current = {};
+                    }
+
+                    /* Walk every element except the last one.
+                     * If the step doesn't exist or isn't an object, create an empty object
+                     * so we can keep drilling down.
+                     */
+                    for (let i = 0; i < path.length - 1; i++) {
+                        const segment = path[i];
+
+                        if (typeof current[segment] !== 'object' || current[segment] === null) {
+                            current[segment] = {};
+                        }
+                        current = current[segment];
+                    }
+
+                    // Set the final segment
+                    const last = path[path.length - 1];
+                    current[last] = value;
+
+                    // Persist back to localStorage
+                    localStorage.setItem(key, JSON.stringify(object));
+                }
+
+                // If a callback is set, call it with the value
+                if(this._callback && typeof this._callback === 'function'){
+                    this._callback(value, subkey, key);
+                }
+            }
+
+            // Get a value from localStorage
+            get(subkey = null, key = null){
+
+                // If no key is provided, use the default key
+                if(key === null || key === undefined || key === ''){
+                    key = this.getKey();
+                }
+
+                // Get the value from localStorage
+                let object = localStorage.getItem(key);
+
+                // Check if the value is a JSON string
+                if(object !== null && object !== undefined && object !== ''){
+                    try {
+                        object = JSON.parse(object);
+                    } catch (e) {
+                        // If parsing fails, return the value as is
+                    }
+                }
+
+                // If no subkey is provided, return the whole object
+                if(subkey === null || subkey === undefined || subkey === ''){
+                    return object;
+                }
+
+                // Define the subkey path
+                let path    = subkey.split(':');
+                let current = object;
+
+                // Make sure we are starting from a real object
+                if (current === null || typeof current !== 'object') {
+                    current = {};
+                }
+
+                /* Walk every element except the last one.
+                    * If the step doesn't exist or isn't an object, create an empty object
+                    * so we can keep drilling down.
+                    */
+                for (let i = 0; i < path.length - 1; i++) {
+                    const segment = path[i];
+
+                    if (typeof current[segment] !== 'object' || current[segment] === null) {
+                        current[segment] = {};
+                    }
+                    current = current[segment];
+                }
+
+                // Return the final segment
+                const last = path[path.length - 1];
+                return current[last] !== undefined ? current[last] : null;
+            }
+
+            // Remove a value from localStorage
+            remove(key = null){
+                if(key === null || key === undefined || key === ''){
+                    key = this.getKey();
+                }
+                // Remove the value from localStorage
+                localStorage.removeItem(key);
             }
         },
     };
