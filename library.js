@@ -8889,10 +8889,10 @@ class Builder {
                 }
 
                 // Set Input Class
-                if(this._properties.class.input){
+                if(typeof field.input !== "undefined" && this._properties.class.input){
                     field.input.addClass(this._properties.class.input);
                 }
-                if(properties.class.input){
+                if(typeof field.input !== "undefined" && properties.class.input){
                     field.input.addClass(properties.class.input);
                 }
 
