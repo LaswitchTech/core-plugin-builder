@@ -1,10 +1,3 @@
-//
-//   Core Framework - Library file
-//
-//   @license    MIT (https://mit-license.org/)
-//   @author     Louis Ouellet <louis@laswitchtech.com>
-//
-
 // Extend Date Object
 Date.prototype.today = function () {
 	return this.getFullYear() + "-" +(((this.getMonth()+1) < 10)?"0":"") + (this.getMonth()+1) + "-" + ((this.getDate() < 10)?"0":"") + this.getDate();
@@ -3183,7 +3176,7 @@ class Builder {
             }
 
             // Set a value in localStorage
-            set(value, subkey = null, key = null){ // Subkey will be stored as key:key:key of the object
+            set(value, subkey = null, key = null){
 
                 // If no key is provided, use the default key
                 if(key === null || key === undefined || key === ''){
