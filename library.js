@@ -10875,7 +10875,7 @@ class Builder {
                     function(modal, component){
 
                         // Remove padding from the body
-                        component.body.addClass('p-0');
+                        component.body.addClass('p-0 text-bg-dark');
 
                         // Fetch metadata
                         self._pdf.getMetadata()
