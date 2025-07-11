@@ -3144,7 +3144,7 @@ class Builder {
 
             // Properties
             _currentKey = null;
-            _callback = null;
+            _callbacks = [];
             _exclude = [
                 "breadcrumbs",
             ];
@@ -3177,10 +3177,10 @@ class Builder {
                 }
             }
 
-            // Set the callback function
-            setCallback(callback){
+            // Add a callback function
+            add(callback){
                 if(typeof callback === 'function'){
-                    this._callback = callback;
+                    this._callbacks.push(callback);
                 }
             }
 
@@ -3254,9 +3254,11 @@ class Builder {
                     localStorage.setItem(key, JSON.stringify(object));
                 }
 
-                // If a callback is set, call it with the value
-                if(this._callback && typeof this._callback === 'function'){
-                    this._callback(value, subkey, key);
+                // If there are callbacks, call them with the value
+                for(const callback of this._callbacks){
+                    if(typeof callback === 'function'){
+                        callback(value, subkey, key);
+                    }
                 }
             }
 
