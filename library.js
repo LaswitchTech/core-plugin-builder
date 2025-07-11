@@ -3145,6 +3145,37 @@ class Builder {
             // Properties
             _currentKey = null;
             _callback = null;
+            _exclude = [
+                "breadcrumbs",
+            ];
+
+            // Constructor
+            constructor(builder){
+
+                // Call Parent
+                super(builder);
+
+                // Scan Search Field
+                this.clear();
+            }
+
+            // Clear all localStorage
+            clear(){
+
+                // Loop through all keys in localStorage
+                for(const key in localStorage) {
+
+                    // Skip keys that are in the exclude list
+                    if (this._exclude.includes(key)) {
+                        continue;
+                    }
+
+                    // Remove the item from localStorage
+                    if (localStorage.hasOwnProperty(key)) {
+                        localStorage.removeItem(key);
+                    }
+                }
+            }
 
             // Set the callback function
             setCallback(callback){
