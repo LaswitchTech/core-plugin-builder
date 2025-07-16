@@ -22,6 +22,34 @@ if(typeof $.fn.select2 !== 'undefined'){
     $.fn.select2.defaults.set("allowClear", true);
 }
 
+// Open IndexedDB
+let __dbPromise = null;
+function openIDB() {
+    if (__dbPromise) return __dbPromise;
+
+    __dbPromise = new Promise((resolve, reject) => {
+        const request = indexedDB.open('StorageAPI', 1);
+
+        request.onupgradeneeded = e => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('kv')) {
+                db.createObjectStore('kv');
+            }
+        };
+
+        request.onsuccess = () => {
+            const db = request.result;
+            db.onversionchange = () => db.close();
+            resolve(db);
+        };
+
+        request.onerror = () => reject(request.error);
+    });
+
+    return __dbPromise;
+}
+
+// Builder Class
 class Builder {
     Search = null;
     Helper = null;
@@ -2561,6 +2589,11 @@ class Builder {
             // Retrieve the favicon of a domain
             favicon(domain) {
 
+                // Check if the domain is a string
+                if (typeof domain !== 'string') {
+                    throw new Error('Domain must be a string');
+                }
+
                 // Sanitize the domain removing any protocol and any path
                 domain = domain.replace('https://', '').replace('http://', '').split('/')[0];
 
@@ -3143,182 +3176,123 @@ class Builder {
         storage: class extends this.UtilityClass {
 
             // Properties
+            _db = null;
+            _callbacks = [];
             _currentKey = null;
-            _callback = null;
-            _exclude = [
-                "breadcrumbs",
-            ];
+            _exclude = ["breadcrumbs"];
 
-            // Constructor
-            constructor(builder){
-
-                // Call Parent
+            constructor(builder) {
                 super(builder);
-
-                // Scan Search Field
-                this.clear();
             }
 
-            // Clear all localStorage
-            clear(){
-
-                // Loop through all keys in localStorage
-                for(const key in localStorage) {
-
-                    // Skip keys that are in the exclude list
-                    if (this._exclude.includes(key)) {
-                        continue;
-                    }
-
-                    // Remove the item from localStorage
-                    if (localStorage.hasOwnProperty(key)) {
-                        localStorage.removeItem(key);
-                    }
-                }
+            async _ensureReady() {
+                if (this._db) return;
+                this._db = await openIDB();
             }
 
-            // Set the callback function
-            setCallback(callback){
-                if(typeof callback === 'function'){
-                    this._callback = callback;
-                }
+            _store(mode = 'readonly') {
+                return this._db.transaction('kv', mode).objectStore('kv');
             }
 
-            // Set a custom key for storage
-            setKey(key){
-                if(typeof key !== 'undefined' && key !== null && key !== ''){
-                    this._currentKey = key;
-                }
+            async clear() {
+                await this._ensureReady();
+                const store = this._store('readwrite');
+
+                return new Promise((res, rej) => {
+                    const req = store.openCursor();
+                    req.onsuccess = e => {
+                        const cursor = e.target.result;
+                        if (!cursor) return res();
+                        if (!this._exclude.includes(cursor.key)) cursor.delete();
+                        cursor.continue();
+                    };
+                    req.onerror = () => rej(req.error);
+                });
             }
 
-            // Generate a storage key
-            getKey(){
-                if(typeof this._currentKey !== 'undefined' && this._currentKey !== null && this._currentKey !== ''){
-                    return this._currentKey;
-                }
-                const pathname = window.location.pathname;
-                const urlParams = new URLSearchParams(window.location.search);
-                const id = urlParams.get('id');
-                var key = pathname.replace(/^\/+|\/+$/g, '').replace(/\//g, ':').replace(/^:+|:+$/g, '')
-                if(id !== null && id !== undefined && id !== ''){
-                    key += ':' + id;
-                }
-                return key || 'index'
+            add(cb) {
+                if ($.isFunction(cb)) this._callbacks.push(cb);
             }
 
-            // Set a value in localStorage
-            set(value, subkey = null, key = null){
+            setKey(k) {
+                if (k) this._currentKey = k;
+            }
 
-                // If no key is provided, use the default key
-                if(key === null || key === undefined || key === ''){
-                    key = this.getKey();
-                }
+            getKey() {
+                if (this._currentKey) return this._currentKey;
+                const path = window.location.pathname
+                    .replace(/^\/+|\/+$/g, '')
+                    .replace(/\//g, ':')
+                    .replace(/^:+|:+$/g, '');
+                const id = new URLSearchParams(location.search).get('id');
+                return (path || 'index') + (id ? ':' + id : '');
+            }
 
-                // Get the existing value from localStorage
-                let object = this.get(null, key);
+            async set(value, subkey = null, key = null) {
+                await this._ensureReady();
+                key = key || this.getKey();
 
-                // Check if a subkey is provided
-                if(subkey === null || subkey === undefined || subkey === ''){
+                let object = subkey ? await this.get(null, key) : null;
 
-                    // Set the value in localStorage
-                    localStorage.setItem(key, JSON.stringify(value));
-                } else {
-
-                    // Define the subkey path
-                    let path    = subkey.split(':');
-                    let current = object;
-
-                    // Make sure we are starting from a real object
-                    if (current === null || typeof current !== 'object') {
-                        current = {};
-                    }
-
-                    /* Walk every element except the last one.
-                     * If the step doesn't exist or isn't an object, create an empty object
-                     * so we can keep drilling down.
-                     */
+                if (subkey) {
+                    const path = subkey.split(':');
+                    let current = (object && typeof object === 'object') ? object : {};
                     for (let i = 0; i < path.length - 1; i++) {
-                        const segment = path[i];
-
-                        if (typeof current[segment] !== 'object' || current[segment] === null) {
-                            current[segment] = {};
-                        }
-                        current = current[segment];
+                        const seg = path[i];
+                        if (typeof current[seg] !== 'object' || current[seg] === null)
+                            current[seg] = {};
+                        current = current[seg];
                     }
-
-                    // Set the final segment
-                    const last = path[path.length - 1];
-                    current[last] = value;
-
-                    // Persist back to localStorage
-                    localStorage.setItem(key, JSON.stringify(object));
+                    current[path[path.length - 1]] = value;
+                    value = object;
                 }
 
-                // If a callback is set, call it with the value
-                if(this._callback && typeof this._callback === 'function'){
-                    this._callback(value, subkey, key);
-                }
+                await new Promise((res, rej) => {
+                    const req = this._store('readwrite').put(JSON.stringify(value), key);
+                    req.onsuccess = () => res();
+                    req.onerror = () => rej(req.error);
+                });
+
+                for (const cb of this._callbacks) cb(value, subkey, key);
+                return this;
             }
 
-            // Get a value from localStorage
-            get(subkey = null, key = null){
+            async get(subkey = null, key = null) {
+                await this._ensureReady();
+                key = key || this.getKey();
 
-                // If no key is provided, use the default key
-                if(key === null || key === undefined || key === ''){
-                    key = this.getKey();
-                }
+                const value = await new Promise((res, rej) => {
+                    const req = this._store().get(key);
+                    req.onsuccess = () => res(req.result);
+                    req.onerror = () => rej(req.error);
+                });
 
-                // Get the value from localStorage
-                let object = localStorage.getItem(key);
+                let object = value ? JSON.parse(value) : null;
+                if (!subkey) return object;
 
-                // Check if the value is a JSON string
-                if(object !== null && object !== undefined && object !== ''){
-                    try {
-                        object = JSON.parse(object);
-                    } catch (e) {
-                        // If parsing fails, return the value as is
-                    }
-                }
-
-                // If no subkey is provided, return the whole object
-                if(subkey === null || subkey === undefined || subkey === ''){
-                    return object;
-                }
-
-                // Define the subkey path
-                let path    = subkey.split(':');
+                const path = subkey.split(':');
                 let current = object;
-
-                // Make sure we are starting from a real object
-                if (current === null || typeof current !== 'object') {
-                    current = {};
+                for (const seg of path) {
+                    if (!current || typeof current !== 'object') return null;
+                    current = current[seg];
                 }
 
-                /* Walk every element except the last one.
-                    * If the step doesn't exist or isn't an object, create an empty object
-                    * so we can keep drilling down.
-                    */
-                for (let i = 0; i < path.length - 1; i++) {
-                    const segment = path[i];
-
-                    if (typeof current[segment] !== 'object' || current[segment] === null) {
-                        current[segment] = {};
-                    }
-                    current = current[segment];
-                }
-
-                // Return the final segment
-                const last = path[path.length - 1];
-                return current[last] !== undefined ? current[last] : null;
+                return current ?? null;
             }
 
-            // Remove a value from localStorage
-            remove(key = null){
-                if(key === null || key === undefined || key === ''){
-                    key = this.getKey();
-                }
-                // Remove the value from localStorage
-                localStorage.removeItem(key);
+            async remove(key = null) {
+                await this._ensureReady();
+                key = key || this.getKey();
+                const oldVal = await this.get(null, key);
+
+                await new Promise((res, rej) => {
+                    const req = this._store('readwrite').delete(key);
+                    req.onsuccess = () => res();
+                    req.onerror = () => rej(req.error);
+                });
+
+                for (const cb of this._callbacks) cb(null, null, key);
+                return this;
             }
         },
     };
